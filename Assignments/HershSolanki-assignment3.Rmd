@@ -1,0 +1,811 @@
+---
+title : 'W271 Assignment 3'
+subtitle: 'Due 11:59pm Pacific Time Sunday April 5 2020'
+output: 
+  pdf_document:
+  toc: true
+  number_sections: true
+fontsize: 11pt
+geometry: margin=1in
+---
+
+## Instructions (Please Read Carefully):
+
+* No page limit, but be reasonable
+
+* Do not modify fontsize, margin or line_spacing settings
+
+* This assignment needs to be completed individually; this is not a group project. Each student needs to submit their homework to the course github repo by the deadline; submission and revisions made after the deadline will not be graded
+
+* Answers should clearly explain your reasoning; do not simply 'output dump' the results of code without explanation 
+
+* Submit two files:
+    
+    1. A pdf file that details your answers. Include all R code used to produce the answers. Do not suppress the codes in your pdf file
+    
+    2. The R markdown (Rmd) file used to produce the pdf file
+  
+    The assignment will not be graded unless **both** files are submitted
+      
+* Use the following file-naming convensation:
+    * StudentFirstNameLastName_HWNumber.fileExtension
+    * For example, if the student's name is Kyle Cartman for assignment 1, name your files follows:
+        * KyleCartman_assignment3.Rmd
+        * KyleCartman_assignment3.pdf
+            
+* Although it sounds obvious, please write your name on page 1 of your pdf and Rmd files
+
+* For statistical methods that we cover in this course, use the R libraries and functions that are covered in this course. If you use libraries and functions for statistical modeling that we have not covered, you must provide an explanation of why such libraries and functions are used and reference the library documentation. For data wrangling and data visualization, you are free to use other libraries, such as dplyr, ggplot2, etc.
+
+* For mathematical formulae, type them in your R markdown file. Do not e.g. write them on a piece of paper, snap a photo, and use the image file.
+
+* Incorrectly following submission instructions results in deduction of grades
+
+* Students are expected to act with regard to UC Berkeley Academic Integrity
+
+\newpage
+
+```{r  message=FALSE}
+
+library(dplyr)
+library(lubridate)
+library(tsibble)
+library(feasts)
+library(forecast)
+library(fpp3)
+library(fma)
+
+```
+
+# Question 1 (1 point) 
+
+**Time Series Linear Model**
+
+Daily electricity demand and temperature (in degrees Celsius) is recorded in `Q1.csv`. 
+
+**a)** Plot electricy demand and temperature as time series. Find the regression model for demand with temperature as an explanatory variable. Why do you think there a positive relationship?
+
+```{r  fig.height=3, fig.width=5}
+df.1 <- read.csv("Q1.csv", header = T)
+head(df.1)
+
+plot.ts(df.1$Demand)
+plot.ts(df.1$Temperature)
+
+summary(lm(Demand ~  Temperature, df.1))
+```
+**There is a positive relationship, but it is not significant. It is likely the case as temperature increases, AC is needed, thus increasing the demand for electricity.**
+
+**b)** Produce a residual plot. Is the model adequate? Describe any outliers or influential observations, and discuss how the model could be improved.
+
+```{r  fig.height=3, fig.width=5}
+res = resid(lm(Demand ~ Temperature, data = df.1))
+plot(res)
+abline(0, 0)
+```
+
+There are some outliers in the 0 index. Moreover, there seems to be a visible pattern in the residuals.
+
+
+**c)** Use a model to forecast the electricity demand (with prediction intervals) that you would expect for the next day if the maximum temperature was $15^\circ$. Compare this with the forecast if the with maximum temperature was $35^\circ$. Do you believe these forecasts?
+
+```{r  message=FALSE}
+
+forecast(lm(Demand ~ Temperature, data = df.1), newdata=data.frame(Temperature=c(15,35)))
+
+```
+It's hard to believe these point forecasts because the confidence intervals are massive, and they even overlap. Hard to make much of them. This model is terrible.
+
+**d)** Plot Demand vs Temperature for all of the available data in `Q1.csv`. What does this say about your model?
+
+```{r  fig.height=3, fig.width=5}
+plot(df.1$Temperature, df.1$Demand)
+```
+
+There is a positive relationship between the two variables, but it is not consisitent over time. The best way to fit this data would be with a parabolic line. 
+
+\newpage
+
+# Question 2 (1 point) 
+
+**Elasticity**
+
+A log-log functional form is specified as $\log y = \beta_0 + \beta_1 \log x + \epsilon$ 
+
+In this model, the slope $\beta_1$ can be interpreted as an *elasticity* coefficient, representing the expected percentage change in $y$ (e.g. quantity demanded) resulting from a percentage increase in $x$ (e.g. price). 
+
+Mathematically, the elasticity is defined as $\frac{dy}{y} \div \frac{dx}{x}$
+
+Show that this expression is equivalent to $\beta_1$ when considering the conditional expectation of $\log y$ given $x$.
+
+Log functional form
+$$
+\log y = \beta_0 + \beta_1 \log x + \epsilon
+$$
+Want to show
+$$
+\dfrac{dy}{y} * \dfrac{x}{dx} = \beta_1
+$$
+Thus, you differentiate the intial equation:
+$$
+\dfrac{dy}{y}  = \beta_1*\dfrac{dx}{x}
+$$
+Then, rearrange
+$$
+\dfrac{dy}{y} / \dfrac{dx}{x} = \beta_1
+$$
+Which comes out to what we were trying to solve for:
+$$
+\dfrac{dy}{y} * \dfrac{x}{dx} = \beta_1
+$$
+\newpage
+
+# Question 3 (1 point)
+
+**Cross validation**
+
+The `gafa_stock` data set from the `tsibbledata` package contains historical stock price data for Google, Amazon, Facebook and Apple.
+The following code fits the following models to a 2015 training set of Google stock prices: 
+
+* `MEAN()`: the *average method*, forecasting all future values to be equal to the mean of the historical data
+
+* `NAIVE()`: the *naive method*, forecasting all future values to be equal to the value of the latest observation  
+
+* `RW()`: the *drift method*, forecasting all future values to continue following the average rate of change between the last and first observations. This is equivalent to forecasting using a model of a random walk with drift.
+
+```{r  message=FALSE}
+# Re-index based on trading days
+google_stock <- gafa_stock %>%
+  filter(Symbol == "GOOG") %>%
+  mutate(day = row_number()) %>%
+  update_tsibble(index = day, regular = TRUE)
+
+# Filter the year of interest
+google_2015 <- google_stock %>% filter(year(Date) == 2015)
+
+# Fit models
+google_fit <- google_2015 %>%
+  model(
+    Mean = MEAN(Close),
+    `Naïve` = NAIVE(Close),
+    Drift = RW(Close ~ drift())
+  )
+```
+
+The following creates a test set of January 2016 stock prices, and plots this against the forecasts from the average, naive and drift models:
+
+```{r message=FALSE}
+google_jan_2016 <- google_stock %>%
+  filter(yearmonth(Date) == yearmonth("2016 Jan"))
+google_fc <- google_fit %>% forecast(google_jan_2016)
+
+# Plot the forecasts
+google_fc %>%
+  autoplot(google_2015, level = NULL) +
+    autolayer(google_jan_2016, Close, color='black') +
+    ggtitle("Google stock (daily ending 31 Dec 2015)") +
+    xlab("Day") + ylab("Closing Price (US$)") +
+    guides(colour=guide_legend(title="Forecast"))
+```
+
+Forecasting performance can be measured with the `accuracy()` function:
+
+```{r message=FALSE}
+accuracy(google_fc, google_stock)
+```
+
+These measures compare model performance over the entire test set. An alternative version of pseudo-out-of-sample forecasting is **time series cross-validation**.
+
+In this procedure, there may be a series of 'test sets', each consisting of a limited number of observations one or multiple steps ahead. The corresponding training set consists only of observations that occurred prior to the observations that forms the test set. The forecast accuracy is computed by averaging over the test sets. Since it is not possible to obtain a reliable forecast based on a small training set, the earliest observations are not considered as test sets.
+
+```{r message=FALSE}
+# Time series cross-validation accuracy
+google_2015_tr <- google_2015 %>%
+  slice(1:(n()-1)) %>%
+  stretch_tsibble(.init = 3, .step = 1)
+
+fc <- google_2015_tr %>%
+  model(RW(Close ~ drift())) %>%
+  forecast(h=60)
+
+fc %>% accuracy(google_2015)
+```
+
+Use cross-validation to compare the forecasting accuracy of the naive and drift models, as the number of steps ahead is allowed to vary. Define the accuracy measure(s) you are using to make the comparison. 
+
+```{r message=FALSE}
+google_2015_tr <- google_2015 %>%
+  slice(1:(n() - 1)) %>%
+  stretch_tsibble(.init = 3, .step = 1)
+
+final_df = data.frame()
+
+# Loop over to get various values for the naive/drift model given number of steps ahead
+for (p in seq(1, 20)) {
+  hvalue <- p
+
+  fc <- google_2015_tr %>%
+    model(RW(Close ~ drift())) %>%
+    forecast(h = hvalue)
+
+  e <- tsCV(fc$Close, rwf, drift = TRUE, h = hvalue)
+
+  # -------------------------------
+  fc2 <- google_2015_tr %>%
+    model(NAIVE(Close)) %>%
+    forecast(h = hvalue)
+
+  e2 <- tsCV(fc2$Close, rwf, h = hvalue)
+
+  result = data.frame(h=hvalue, Drift=sqrt(mean(e*e, na.rm = TRUE)), Naive = sqrt(mean(e2*e2, na.rm = TRUE)))
+  total_df <- rbind(final_df, result)
+  final_df <- total_df
+}
+
+final_df
+
+```
+
+
+```{r fig.height=3, fig.width=5}
+ggplot(final_df, aes(h)) +
+  geom_line(aes(y=Drift), colour="red") +
+  geom_line(aes(y=Naive), colour="green") + ggtitle("RMSE vs Forecast") +
+  xlab("Time periods") + ylab("RMSE")
+```
+\newpage
+
+# Question 4 (1 point)
+
+**Harmonic regression**
+
+A Fourier series is a periodic function composed of series of sine and cosine terms of varying frequencies. Fourier terms can be incorporated into a time series regression to model seasonal patterns. This type of model element is sometimes known as 'trigonometric seasonality'.
+
+If $m$ is the seasonal period, then the first few terms of a Fourier series are given by 
+$x_{1,t}=\sin(2\pi t m)$,
+$x_{2,t}=\cos(2\pi t m)$,
+$x_{3,t}=\sin(4\pi t m)$,
+$x_{4,t}=\cos(4\pi t m)$,
+$x_{5,t}=\sin(6\pi t m)$,
+$x_{5,t}=\cos(6\pi t m)$
+
+and so on. 
+
+If we have monthly seasonality, and we use the first 11 of these predictor variables, then we will get exactly the same forecasts as using 11 dummy variables.
+
+With Fourier terms, we often need fewer predictors than with dummy variables, especially when $m$ is large. This makes them useful for weekly data, for example, where $m \approx 52$ (for short seasonal periods (e.g., quarterly data), there is little advantage in using Fourier terms over seasonal dummy variables).
+
+These Fourier terms are produced using the `fourier(x, K)` function in R, where `x` is a seasonal time series and `K` is the order of Fourier terms, up to a maximum of $K=m/2$. A regression model containing Fourier terms can be called a harmonic regression.  
+
+For example, Australian beer production data can be modelled like this:
+
+```{r message=FALSE}
+recent_production <- aus_production %>%
+  filter(year(Quarter) >= 1992)
+fourier_beer <- recent_production %>%
+  model(TSLM(Beer ~ trend() + fourier(K=2)))
+report(fourier_beer)
+fc_beer <- forecast(fourier_beer)
+fc_beer %>%
+  autoplot(recent_production) +
+  ggtitle("Forecasts of beer production using harmonic regression") +
+  xlab("Year") + ylab("megalitres")
+```
+
+The `us_gasoline` series from the `fpp3` package consists of weekly data for supplies of US finished motor gasoline product, from 2 February 1991 to 20 January 2017. The units are in “million barrels per day”. Consider only the data to the end of 2004.
+
+**a)** Fit a harmonic regression with trend to the data. Select the appropriate number of Fourier terms to include by minimising the AIC value. Plot and describe the observed and fitted gasoline values.
+    
+```{r message=FALSE}
+
+# Only until end of 2004
+old_production <- us_gasoline %>%
+  filter(year(Week) < 2005)
+
+# Fit various values for the fourier()
+fit <- old_production %>%
+  model(
+    `K = 1` = TSLM(Barrels ~ fourier(K = 1) + trend()),
+    `K = 2` = TSLM(Barrels ~ fourier(K = 2) + trend()),
+    `K = 3` = TSLM(Barrels ~ fourier(K = 3) + trend()),
+    `K = 4` = TSLM(Barrels ~ fourier(K = 4) + trend()),
+    `K = 5` = TSLM(Barrels ~ fourier(K = 5) + trend()),
+    `K = 6` = TSLM(Barrels ~ fourier(K = 6) + trend()),
+    `K = 7` = TSLM(Barrels ~ fourier(K = 7) + trend()),
+    `K = 8` = TSLM(Barrels ~ fourier(K = 8) + trend()),
+    `K = 9` = TSLM(Barrels ~ fourier(K = 9) + trend())
+  )
+
+# Plot the various fits over 2 years to get the lowest AIC value
+fit %>%
+  forecast(h = "2 years") %>%
+  autoplot(old_production) +
+  facet_wrap(vars(.model), ncol = 3) +
+  guides(colour = FALSE) +
+  geom_label(
+    aes(x = yearmonth("2007 Jan"), hjust=1, y = 10, label = paste0("AIC = ", format(AIC))),
+    data = glance(fit)
+  )
+
+```    
+The lowest AIC is with K = 7, meaning I will pick that model to model the seasonal variation.
+
+**b)** Check the residuals of the final model using `gg_tsresiduals()`. Use a Ljung-Box test to check for correlation in the residuals. Even though the residuals fail the correlation tests, the results are probably not severe enough to make much difference to the forecasts and prediction intervals. (Note that the correlations are reltively small, even though they are significant.)
+
+```{r message=FALSE}
+
+# Fit model with lowest AIC
+model.7 <- old_production %>%
+  model(
+    `K = 7` = TSLM(Barrels ~ fourier(K = 7) + trend()),
+  )
+
+# See residuals
+model.7  %>% gg_tsresiduals()
+
+# Ljung Box Test
+augment(model.7) %>%
+  features(.resid, ljung_box, lag = 1)
+
+# -------
+# Repeat the process, but use ARIMA instead
+model.7.2 <- old_production %>%
+  model(
+    `K = 7` = ARIMA(Barrels ~ fourier(K = 7) + PDQ(0,0,0)),
+  )
+
+model.7.2  %>% gg_tsresiduals()
+
+augment(model.7.2) %>%
+  features(.resid, ljung_box, lag = 1)
+
+```
+The Ljung-Box test shows the residuals to be white noise for the ARIMA model, but not the TSLM with the same value of the Fourier term. We can prefer the ARIMA model.
+
+**c)** Plot forecasts along with the actual data for 2005. What do you find?
+
+```{r message=FALSE}
+
+# Get predicted v actual values
+prediction <- as_data_frame(model.7 %>% forecast(h=52))[2:3]
+actual <- as_data_frame(us_gasoline %>% filter(year(Week) < 2006)  %>%  filter(year(Week) >2004))
+
+# Combine them to graph
+combined <- merge(prediction, actual, by="Week")
+
+# Graph
+ggplot(combined, aes(Week)) +                 
+  geom_line(aes(y=Barrels.x, color = "Predicted")) +  
+  geom_line(aes(y=Barrels.y, color="Actual")) + 
+  autolayer(old_production, Barrels, color='black') +
+  ggtitle("Actual v Predicted") +
+  xlab("Time periods") + ylab("Value")  + 
+  scale_color_manual(values = c("blue","red"))
+
+# Focus in on the year itsself
+ggplot(combined, aes(Week)) +                 
+  geom_line(aes(y=Barrels.x, color = "Predicted")) +  
+  geom_line(aes(y=Barrels.y, color="Actual")) +
+  ggtitle("Actual v Predicted") +
+  xlab("Time periods") + ylab("Value")  + 
+  scale_color_manual(values = c("blue","red"))
+```
+I see the predicted is quite smoothed, and has mainly a similar shape to the actual. The first half the series is predicted well, the 2nd half not so much so.
+
+# Question 5 (1 point): 
+
+**ARIMA model** 
+
+Consider `fma::sheep`, the sheep population of England and Wales from 1867–1939.
+
+```{r message=FALSE}
+head(fma::sheep)
+```
+
+**a)** Produce a time plot of the time series.
+
+```{r fig.height=3, fig.width=5}
+# Show time series
+sheep_ts <- as_tsibble(sheep)
+sheep_ts %>% autoplot(value) + ylab("Sheep Population") + xlab("Year")
+```
+
+
+**b)** Assume you decide to fit the following model: 
+$$y_t=y_{t-1}+\phi_1(y_{t-1}-y_{t-2})+\phi_2(y_{t-2}-y_{t-3})+\phi_3(y_{t-3}-y_{t-4})+\epsilon_t$$
+where $\epsilon_t$ is a white noise series. What sort of ARIMA model is this (i.e., what are p, d, and q)?
+
+$$
+ARIMA(3, 1, 0)
+$$
+
+**c)** By examining the ACF and PACF of the differenced data, explain why this model is appropriate.
+
+```{r message=FALSE}
+# Differenced series
+diff_sheep <- diff(sheep_ts$value, differences=1)
+acf(diff_sheep, lag.max=34)
+pacf(diff_sheep, lag.max=34)
+```
+When look at the ACF, there is a line at lag 3 which far overshoots the CI. Thus, we would use an AR(3) process in order to model it. 
+
+**d)** The last five values of the series are given below:
+
+|Year              | 1935| 1936| 1937| 1938| 1939|
+|:-----------------|----:|----:|----:|----:|----:|
+|Millions of sheep | 1648| 1665| 1627| 1791| 1797|
+
+
+The estimated parameters are $\phi_1=0.42$, 
+$\phi_2=-0.20$, and $\phi_3=-0.30$.
+
+Without using the forecast function, calculate forecasts for the next three years (1940–1942).
+
+```{r message=FALSE}
+
+# Use formulas based of phi
+value1939 = 1797
+value1938 = 1791
+value1937 = 1627
+value1936 = 1665
+phi1 = 0.42
+phi2 = -0.20
+phi3 = -0.30
+
+predicted1940 <-  phi1*(value1939 - value1938) + phi2*(value1938 - value1937) + phi3*(value1937 - value1936) + value1939
+
+predicted1941 <- phi1*(predicted1940 - value1939) + phi2*(value1939 - value1938) + phi3*(value1938 - value1937) + predicted1940
+
+predicted1942 <- phi1*(predicted1941 - predicted1940) + phi2*(predicted1940 - value1939) + phi3*(value1939 - value1938) + predicted1941 
+
+
+predicted1940
+predicted1941
+predicted1942
+```
+
+\newpage
+
+# Question 6 (1 point): 
+
+**Part 1**
+
+**Backshift Operator Expression** 
+
+Write down the following two models in terms of (1) backshift operators and (2) the fully-expressed form as $y_t$ as a function of lags of $y_t$ and the shock $\omega_t$. 
+
+For example, for the $ARIMA(1,0,1)(0,0,0)_{4}$ model, you would write down:
+
+1. $(1-\phi_1 B)y_t = (1 + \theta_1 B)\omega_t$
+  
+2. $y_t = \phi_1 y_{t-1} + \omega_t + \theta_1 \omega_{t-1}$
+
+**a)** $ARIMA(2,0,2)(1,0,1)_{4}$ 
+
+<!-- Pulled from - http://halweb.uc3m.es/esp/Personal/personas/amalonso/esp/TSAtema6.pdf -->
+$$
+(1-\Phi_1B^4)(1-\phi_B-\phi_2B^2)y_t = (1 - \theta_1 B + \theta_2 B^2)(1 + \Theta_1 B^4)\omega_t
+$$
+
+$$
+y_t = \phi_1 y_{t-1} + \phi_2 y_{t-2} + \Phi y_{t-4} + \theta_1 \omega_{t-1} + \theta_2 \omega_{t-2} + \Theta \omega_{t-4} + \omega_t
+$$
+
+**b)** $ARIMA(2,1,2)(1,1,1)_{4}$ 
+
+$$
+(1-\Phi_1B^4)(1-\phi_B-\phi_2B^2)(1-B^4)(1-B)y_t = (1 + \theta_2 B + \theta_2 B^2)(1 + \Theta_1 B^4)\omega_t
+$$
+
+$$
+y_t = y_{t-1} + y_{t-4} + \phi_1 y_{t-1} + \phi_2 y_{t-2} + \Phi y_{t-4} + \theta_1 \omega_{t-1} + \theta_2 \omega_{t-2} + \Theta \omega_{t-4} + \omega_t
+$$
+
+**Part 2**
+
+**Parameter Redundancy, Stationarity, and Invertibility**
+
+In each of the following cases, (1) check for parameter redundancy and ensure that the $ARMA(p,q)$ notation is expressed in the simplest form, and (2) determine whether they are stationary and/or invertible.
+
+**a)** 
+$$y_t = y_{t-1} - \frac{1}{4} y_{t-2} + \omega_t + \frac{1}{2} \omega_{t-1}$$
+This is stationary, because the root of the AR process is |2|. Moreover, the root of the MA process is also 2, meaning it is invertible. There is no parameter redundancy.
+
+
+**b)** 
+$$y_t = \frac{7}{10}y_{t-1} - \frac{1}{10} y_{t-2} + \omega_t + \frac{3}{2} \omega_{t-1}$$
+This is stationary, because the root of the AR process is |2|. Moreover, the root of the MA process is 2/3, meaning it is not invertible. There is no parameter redundancy.
+
+
+
+\newpage
+
+# Question 7 (1 point): 
+
+**Seasonal ARIMA model**
+
+Download the series of E-Commerce Retail Sales as a Percent of Total Sales from:
+
+https://fred.stlouisfed.org/series/ECOMPCTNSA
+
+(Feel free to explore the `fredr` package and API if interested.)
+
+Build a Seasonal ARIMA model for this series, following all appropriate steps for a univariate time series model: checking the raw data, conducting a thorough EDA, justifying all modeling decisions (including transformation), testing model assumptions, and clearly articulating why you chose your given model. Measure and discuss your model’s in-sample and pseudo-out-of-sample model performance, including with cross-validation. Use your model to generate a twelve-month forecast, and discuss its plausibility. 
+
+
+Data Processing
+```{r message=FALSE}
+df.7 <- read.csv('ECOMPCTNSA.csv', header = TRUE, stringsAsFactors = FALSE)
+df.7$DATE <- as.Date(fast_strptime(df.7$DATE, '%Y-%m-%d'))
+df.7.tsibble <- as_tsibble(df.7, index = DATE)
+# Make sure there are no gaps in the data
+df.7.tsibble <- df.7.tsibble %>%
+  mutate(YearMonth = yearmonth(as.character(DATE))) %>%
+  as_tsibble(index = YearMonth)  %>% select(ECOMPCTNSA, YearMonth)
+head(df.7.tsibble)
+```
+
+We can see the case for seasonality
+```{r fig.height=3, fig.width=5}
+df.7.tsibble %>% gg_subseries(period = 12) 
+
+dcmp <- df.7.tsibble %>%
+  model(STL(ECOMPCTNSA))
+
+components(dcmp) %>% autoplot() + xlab("Year")
+```
+
+```{r fig.height=3, fig.width=5}
+# 73/8 split on test and train data
+df.7.tsibble.train <-  df.7.tsibble %>% filter(YearMonth < yearmonth('2018 Jan'))
+df.7.tsibble.test<- df.7.tsibble %>% filter(YearMonth >= yearmonth('2018 Jan'))
+
+# The graph with the ACTUAL train data
+autoplot(df.7.tsibble.train, ECOMPCTNSA) + 
+  autolayer(df.7.tsibble.test, ECOMPCTNSA, colour = 'red')
+
+```
+
+Here, we examine the graph as we difference the values. A single difference is not that strong, as there is still a heavy seasonal pattern. It seems as if differencing along with non seasonal differencing gives the best outcome. 
+
+```{r message=FALSE}
+
+df.7.tsibble.train <-  mutate(df.7.tsibble.train,
+                                  diff_freq = difference(ECOMPCTNSA),
+                                  seasdiff_freq = difference(ECOMPCTNSA, lag = 4),
+                                  diffseasdiff_freq = difference(difference(ECOMPCTNSA, lag = 4)))
+
+
+df.7.tsibble.train %>% gg_tsdisplay(diff_freq, plot_type = 'partial')
+
+df.7.tsibble.train %>% gg_tsdisplay(seasdiff_freq, plot_type = 'partial')
+
+df.7.tsibble.train %>% gg_tsdisplay(diffseasdiff_freq, plot_type = 'partial')
+
+```
+
+
+We start by modeling the nonseasonal-ARIMA component. 
+```{r message=FALSE}
+for (p in 0:2) {
+  for (q in 0:2) {
+    tryCatch({
+      fit <- df.7.tsibble.train %>% model(arima = ARIMA(ECOMPCTNSA ~ pdq(p, 1, q) + PDQ(0, 0, 0)))
+      print(paste(p, q, fit$arima[[1]]$fit[[3]]$AIC))
+    },
+    error = function(e) {
+    })
+    
+  }
+}
+
+```
+The lowest AIC is with an ARIMA (2, 1, 2) model. Now move on to the seasonal part.
+
+```{r message=FALSE}
+for (P in 0:1) {
+  for (Q in 0:1) {
+    tryCatch({
+      fit <- df.7.tsibble.train %>% model(arima = ARIMA(ECOMPCTNSA ~ pdq(2, 1, 2) + PDQ(P, 1, Q)))
+      print(paste(P, Q, fit$arima[[1]]$fit[[3]]$AIC))
+    },
+    error = function(e) {
+    })
+    
+  }
+}
+
+```
+Lowest AIC is in (0,0)
+
+
+```{r fig.height=3, fig.width=5}
+fit <- df.7.tsibble.train %>% model(arima = ARIMA(ECOMPCTNSA ~ pdq(2, 1, 2) + PDQ(0, 1, 0)))
+fit %>% report()
+
+fit %>% gg_tsresiduals()
+
+augment(fit) %>% features(.resid, ljung_box)
+
+fit %>% forecast(h=8) %>% autoplot(df.7.tsibble.train)
+predicted <- fit %>% forecast(h=8)
+
+autoplot(df.7.tsibble.train, ECOMPCTNSA) + 
+  autolayer(predicted, ECOMPCTNSA, colour = 'green') + 
+  autolayer(df.7.tsibble.test, ECOMPCTNSA, colour = 'red') 
+
+```
+
+
+Conduct out of sample tests
+```{r fig.height=3, fig.width=5}
+
+
+predicted <- as_data_frame(fit %>% forecast(h=8))[2:3]
+combined <- merge(predicted, df.7.tsibble.test, by="YearMonth")
+
+ggplot(combined, aes(YearMonth)) +                 
+  geom_line(aes(y=ECOMPCTNSA.x, color = "Predicted")) +  
+  geom_line(aes(y=ECOMPCTNSA.y, color="Actual")) +
+  ggtitle("Actual v Predicted") +
+  xlab("Time periods") + ylab("Value")  + 
+  scale_color_manual(values = c("blue","red"))
+
+# Find the end RMSE
+accuracy(combined$ECOMPCTNSA.y, combined$ECOMPCTNSA.x)
+```
+
+12 month forecast looks extremely accurate vs the actual values--it is plausible.
+
+
+\newpage
+
+# Question 8 (1 point): 
+
+**Model averaging**
+
+The `HoltWinters()` function from the base R `stats` package computes a Holt-Winters Filtering of a time series. This is a classical form of exponential smoothing model, an approach to time series modeling that predates Box and Jenkins' ARIMA methodology. Exponential smoothing models are categorized by error, trend and seasonal components, which if present may be additive or multiplicative. Detail is given in the (optional) readings from Cowpertwait and Metcalfe (Chapter 3.4) and Hyndman and Athanasopoulos (Chapter 8.3).
+
+The Holt-Winters method (in additive and multiplicative variants) can also be applied using the `ETS()` function from the `fable` package, as per the following example:
+
+```{r fig.height=3, fig.width=5}
+
+aus_holidays <- tourism %>%
+  filter(Purpose == "Holiday") %>%
+  summarise(Trips = sum(Trips))
+
+# using ETS() function from fable
+fit <- aus_holidays %>%
+  model(
+    additive = ETS(Trips ~ error("A") + trend("A") + season("A")),
+    multiplicative = ETS(Trips ~ error("M") + trend("A") + season("M"))
+  )
+fc <- fit %>% forecast(h = "3 years")
+
+fc %>%
+  autoplot(aus_holidays, level = NULL) + xlab("Year") +
+  ylab("Overnight trips (millions)") +
+  scale_color_brewer(type = "qual", palette = "Dark2")
+```
+
+Apply a Holt-Winters model to the ECOMPCTNSA time series from Question 7, and compare its forecasting performance to that of the ARIMA model you developed. Then compare both to the performance of a simple average of the ARIMA and Holt-Winters models.
+
+```{r fig.height=3, fig.width=5}
+
+
+# using ETS() function from fable
+fit <- df.7.tsibble.train %>%
+  model(
+    multiplicative = ETS(ECOMPCTNSA ~ error("M") + trend("A") + season("M"))
+  )
+fc <- fit %>% forecast(h = 8)
+fc
+
+# Combined dataframes, predictions, and average
+fc <- as_data_frame(fc <- fit %>% forecast(h = 8))[2:3]
+full_combined <- merge(predicted, fc, by="YearMonth")
+full_combined <- merge(df.7.tsibble.test, full_combined, by="YearMonth")
+colnames(full_combined)[2] <- "Actual"
+colnames(full_combined)[3] <- "SARIMA"
+colnames(full_combined)[4] <- "ETC"
+full_combined$Average <- (full_combined$SARIMA + full_combined$ETC)/2
+full_combined
+
+ggplot(full_combined, aes(YearMonth)) +                 
+  geom_line(aes(y=Actual, color = "Actual")) +  
+  geom_line(aes(y=SARIMA, color="SARIMA")) +
+  geom_line(aes(y=ETC, color="ETC")) +
+  geom_line(aes(y=Average, color="Average")) +
+  ggtitle("Combination of all predictions") +
+  xlab("Time periods") + ylab("Value")  + 
+  scale_color_manual(values = c("blue","red", "green", "black"))
+
+accuracy(full_combined$Actual, full_combined$ETC)
+accuracy(full_combined$Actual, full_combined$SARIMA)
+accuracy(full_combined$Actual, full_combined$Average)
+
+
+```
+The Average of the two models seems to give the best result.
+
+\newpage
+
+# Question 10 (1 point): 
+
+**Vector autoregression**
+
+Annual values for real mortgage credit (RMC), real consumer credit (RCC) and real disposable personal income (RDPI) for the period 1946-2006 are recorded in `Q10.csv`. All of the observations are measured in billions of dollars, after adjustment by the Consumer Price Index (CPI). Develop a VAR model for these data for the period 1946-2003, and then forecast the last three years, 2004-2006. Examine the relative advantages of a logarithmic transform and the use of differences.
+
+```{r fig.height=3, fig.width=5}
+# Redo with log and differences
+library(car)
+library(vars)
+df.10 <- read.csv("Q10.csv", header = T, row.names = 1)
+
+# df.10$RMC <- log(df.10$RMC)
+# df.10$RCC <- log(df.10$RCC)
+# df.10$RDPI<- log(df.10$RDPI)
+# df.10
+plot.ts(df.10)
+
+scatterplotMatrix(~df.10[,1]+df.10[,2]+df.10[,3]);
+  title("Contemporaneous Correlation of the 4 Macroeconomic Series ")
+
+```
+
+```{r}
+# From live session 10
+tsplot <- function(series, title) {
+  par(mfrow=c(2,2)) 
+  hist(series, main=""); title(title)
+  plot.ts(series, main=""); title(title)
+  acf(series, main=""); title(paste("ACF",title))  
+  pacf(series, main=""); title(paste("ACF",title))    
+}
+
+tsplot(df.10[,1], "RMC")
+tsplot(df.10[,2], "RCC")
+tsplot(df.10[,3], "RDPI")
+```
+
+```{r fig.height=3, fig.width=5}
+VARselect(df.10, lag.max = 8, type = "both")
+
+var.fit1 <- VAR(df.10, p = 2, type = "both")
+
+var.fit1
+summary(var.fit1)
+names(var.fit1)
+```
+
+
+```{r}
+roots(var.fit1)
+# Test of normality:
+var.fit1.norm <- normality.test(var.fit1, multivariate.only = TRUE)
+# names(var.fit1.norm)
+var.fit1.norm
+
+# Test of no serial correlation:
+var.fit1.ptasy <- serial.test(var.fit1, lags.pt = 12, type = "PT.asymptotic")
+var.fit1.ptasy
+
+
+# Test of the absence of ARCH effect:
+var.fit1.arch <- arch.test(var.fit1)
+names(var.fit1.arch)
+var.fit1.arch
+```
+
+
+```{r}
+# Predictions forward
+var.fit1 %>%  predict(n.ahead = 3, ci = 0.95) %>% fanchart()
+
+var.fit1 %>%  predict(n.ahead = 3, ci = 0.95)
+```
+
+
+
+
+

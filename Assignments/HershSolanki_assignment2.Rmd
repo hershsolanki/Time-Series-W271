@@ -1,0 +1,365 @@
+---
+title : 'W271 Assignment 2'
+subtitle: 'Due 11:59pm Pacific Time, Sunday February 23, 2020'
+output: 
+  pdf_document:
+  toc: true
+  number_sections: true
+fontsize: 11pt
+geometry: margin=1in
+---
+
+Hersh SOlanki
+
+## Instructions (Please Read Carefully):
+
+* **Late submissions will not be accepted**
+
+* No page limit, but be reasonable
+
+* Do not modify fontsize, margin or line_spacing settings
+
+* This assignment needs to be completed individually; this is not a group project
+
+* Submission is by pushing to your student fork of the course repository
+
+* Submit two files:
+    
+    1. A pdf file that details your answers (knit to pdf, do not knit to html then save as pdf). Include all R code used to produce the answers. Do not suppress the code in your pdf file
+    
+    2. The R markdown (Rmd) file used to produce the pdf file
+  
+    The assignment will not be graded unless **both** files are submitted
+      
+* Use the following file-naming convensation:
+    * StudentFirstNameLastName_HWNumber.fileExtension
+    * For example, if the student's name is Kyle Cartman for assignment 1, name your files follows:
+        * KyleCartman_assignment2.Rmd
+        * KyleCartman_assignment2.pdf
+            
+* Although it sounds obvious, please write your name on page 1 of your pdf and Rmd files
+
+* Answers should clearly explain your reasoning; do not simply 'output dump' the results of code without explanation 
+
+* For statistical methods that we cover in this course, use the R libraries and functions that are covered in this course. If you use libraries and functions for statistical modeling that we have not covered, you must provide an explanation of why such libraries and functions are used and reference the library documentation. For data wrangling and data visualization, you are free to use other libraries, such as dplyr, ggplot2, etc.
+
+* For mathematical formulae, type them in your R markdown file. Do not e.g. write them on a piece of paper, snap a photo, and use the image file.
+
+* Incorrectly following submission instructions results in deduction of grades
+
+* Students are expected to act with regard to UC Berkeley Academic Integrity
+
+\newpage
+
+# 1. Strategic Placement of Products in Grocery Stores (5 points)
+
+These questions are taken from Question 12 of chapter of the textbook.
+
+*In order to maximize sales, items within grocery stores are strategically placed to draw customer attention. This exercise examines one type of item—breakfast cereal. Typically, in large grocery stores, boxes of cereal are placed on sets of shelves located on one side of the aisle. By placing particular boxes of cereals on specific shelves, grocery stores may better attract customers to them. To investigate this further, a random sample of size 10 was taken from each of four shelves at a Dillons grocery store in Manhattan, KS. These data are given in the *cereal_dillons.csv *file. The response variable is the shelf number, which is numbered from bottom (1) to top (4), and the explanatory variables are the sugar, fat, and sodium content of the cereals.*
+
+
+**1.1 (1 point):** The explanatory variables need to be reformatted before proceeding further (sample code is provided in the textbook). First, divide each explanatory variable by its serving size to account for the different serving sizes among the cereals. Second, rescale each variable to be within 0 and 1. Construct side-by-side box plots with dot plots overlaid for each of the explanatory variables. Also, construct a parallel coordinates plot for the explanatory variables and the shelf number. Discuss whether possible content differences exist among the shelves.
+
+```{r fig.show='hold', fig.align='center'}
+library(MASS)
+
+d.1 <- read.csv("cereal_dillons.csv", header=TRUE, sep=",")
+d.1$sugar_standard <- d.1$sugar_g / d.1$size_g
+d.1$fat_standard <- d.1$fat_g / d.1$size_g
+d.1$sodium_standard <- (d.1$sodium_mg) / d.1$size_g
+
+
+d.1$sugar_standard <- (d.1$sugar_standard - min(d.1$sugar_standard)) / (max(d.1$sugar_standard) - min(d.1$sugar_standard))
+
+d.1$fat_standard <- (d.1$fat_standard - min(d.1$fat_standard)) / (max(d.1$fat_standard) - min(d.1$fat_standard))
+
+d.1$sodium_standard <- (d.1$sodium_standard - min(d.1$sodium_standard)) / (max(d.1$sodium_standard) - min(d.1$sodium_standard))
+
+head(d.1)
+
+# Using as reference - https://stackoverflow.com/questions/23675735/how-to-add-boxplots-to-scatterplot-with-jitter
+boxplot(sugar_standard ~ Shelf, data = d.1, ylab = "Sugar", xlab = "Shelf", main = "Sugar v Shelf")
+stripchart(sugar_standard ~ Shelf, vertical = TRUE, data = d.1, 
+    method = "jitter", add = TRUE, pch = 20, col = 'blue')
+
+boxplot(fat_standard ~ Shelf, data = d.1, ylab = "Fat", xlab = "Shelf", main = "Fat v Shelf")
+stripchart(fat_standard ~ Shelf, vertical = TRUE, data = d.1, 
+    method = "jitter", add = TRUE, pch = 20, col = 'blue')
+
+boxplot(sodium_standard ~ Shelf, data = d.1, ylab = "Sodium", xlab = "Shelf", main = "Sodium v Shelf")
+stripchart(sodium_standard ~ Shelf, vertical = TRUE, data = d.1, 
+    method = "jitter", add = TRUE, pch = 20, col = 'blue')
+
+parcoord(x = d.1[, c("Shelf", "sugar_standard", "fat_standard" ,"sodium_standard")], col = d.1$Shelf)
+
+```
+Shelf 2 seems to have the most sugary prodcuts, while shelf 1 seems to have the ones with the most sodium In terms of fat, it is a bit more varied, but shelf 1/3 once again has the fattiest products.
+
+
+**1.2 (1 point):** The response has values of $1, 2, 3,$ and $4$. Explain under what setting would it be desirable to take into account ordinality, and whether you think that this setting occurs here. Then estimate a suitable multinomial regression model with linear forms of the sugar, fat, and sodium variables. Perform LRTs to examine the importance of each explanatory variable. Show that there are no significant interactions among the explanatory variables (including an interaction among all three variables).
+
+It could make sense to look at ordinality if certain shelves were significanlty more profitable than others. As a result, certain cerial makers would want to pay a lot more for a certain shelf vs another shelf. However, we don't have this information, so we ignore ordinality in this case.
+
+```{r fig.show='hold', fig.align='center'}
+library(nnet)
+library(car)
+d.1$Shelf <- factor(d.1$Shelf)
+model.1.2 <- multinom(Shelf ~ sugar_standard + fat_standard + sodium_standard, data = d.1)
+summary(model.1.2)
+```
+The equation of the model for 1 v 2 is: 6.900708 + 2.693071(sugar standard) + 4.0647092(fat_standard) - 17.49373(sodium_standard).
+
+The equation of the model for 1 v 3 is: 21.680680 - 12.216442(sugar standard) - 0.5571273(fat_standard) - 24.97850(sodium_standard).
+
+The equation of the model for 1 v 4 is: 21.288343 - 11.393710(sugar standard) - 0.8701180(fat_standard) - 24.67385(sodium_standard).
+```{r fig.show='hold', fig.align='center'}
+Anova(model.1.2)
+```
+We can see that sugar and sodium are statsitically significant, but fat is not.
+
+```{r fig.show='hold', fig.align='center'}
+model.combined<- multinom(Shelf ~ sugar_standard * fat_standard * sodium_standard , data = d.1)
+Anova(model.combined)
+```
+We can see that none of the interactions have any significance. The individual sugar and sodium effects are significant, but the interactions are not.
+
+**1.3 (1 point):** Kellogg’s Apple Jacks (http://www.applejacks.com) is a cereal marketed toward children. For a serving size of $28$ grams, its sugar content is $12$ grams, fat content is $0.5$ grams, and sodium content is $130$ milligrams. Estimate the shelf probabilities for Apple Jacks.
+```{r fig.show='hold', fig.align='center'}
+
+serving <- 28
+sugar <- 12 / serving
+fat <- 0.5 / serving
+sodium <- 130 / serving
+
+# Use this formula - https://stats.stackexchange.com/questions/70801/how-to-normalize-data-to-0-1-range
+sugar_sc <- (sugar - min(d.1$sugar_g / d.1$size_g)) / (max(d.1$sugar_g / d.1$size_g) - min(d.1$sugar_g / d.1$size_g))
+# print(sugar_sc)
+fat_sc <- (fat - min(d.1$fat_g / d.1$size_g)) / (max(d.1$fat_g / d.1$size_g) - min(d.1$fat_g / d.1$size_g))
+# print(fat_sc)
+sodium_sc <- (sodium - min(d.1$sodium_mg / d.1$size_g)) / (max(d.1$sodium_mg / d.1$size_g) - min(d.1$sodium_mg / d.1$size_g))
+# print(sodium_sc)
+
+predictDF <- data.frame(sugar_standard = sugar_sc, fat_standard = fat_sc, sodium_standard = sodium_sc)
+
+predict(object = model.1.2, predictDF, type = "probs")
+
+```
+
+**1.4 (1 point):** Construct a plot similar to Figure 3.3 where the estimated probability for a shelf is on the *y-axis* and the sugar content is on the *x-axis*. Use the mean overall fat and sodium content as the corresponding variable values in the model. Interpret the plot with respect to sugar content.
+
+```{r fig.show='hold', fig.align='center'}
+beta.hat <- coefficients(model.1.2)
+fat_mean <- mean(d.1$fat_standard)
+sodium_mean <- mean(d.1$sodium_standard)
+
+curve(expr = 1/(1 + exp(beta.hat[1,2]*fat_mean + beta.hat[1,3]*x*sodium_mean) + exp(beta.hat[2,2]*fat_mean + beta.hat[2,3]*x*sodium_mean) + exp(beta.hat[3,2]*fat_mean + beta.hat[3,3]*x*sodium_mean)), xlab = "Sg/Serving", ylab= expression(hat(pi)),
+      xlim = c(0, 1), ylim = c(0,1), col = "black", lty = "solid", lwd = 2, n = 1000, type = "n",
+      panel.first = grid(col = "gray", lty = "dotted"))
+
+lwd.mult<-2
+
+curve(expr = 1/(1 + exp(beta.hat[1,2]*fat_mean + beta.hat[1,3]*x*sodium_mean) + exp(beta.hat[2,2]*fat_mean + beta.hat[2,3]*x*sodium_mean) + exp(beta.hat[3,2]*fat_mean + beta.hat[3,3]*x*sodium_mean)),
+      col = "yellow", lty = "solid", n = 1000, add = TRUE,
+      xlim = c(min(d.1$sugar_standard[d.1$Shelf==1]), max(d.1$sugar_standard[d.1$Shelf==1])))
+
+
+# For #2
+curve(expr = exp(beta.hat[1,2]*fat_mean + beta.hat[1,3]*x*sodium_mean)/(1 + exp(beta.hat[1,2]*fat_mean + beta.hat[1,3]*x*sodium_mean) + exp(beta.hat[2,2]*fat_mean + beta.hat[2,3]*x*sodium_mean) + exp(beta.hat[3,2]*fat_mean + beta.hat[3,3]*x*sodium_mean)),
+      col = "green", lty = "dotdash", n = 1000, add = TRUE,
+      xlim = c(min(d.1$sugar_standard[d.1$Shelf==2]), max(d.1$sugar_standard[d.1$Shelf==2])))
+
+curve(expr = exp(beta.hat[2,2]*fat_mean + beta.hat[2,3]*x*sodium_mean)/(1 + exp(beta.hat[1,2]*fat_mean + beta.hat[1,3]*x*sodium_mean) + exp(beta.hat[2,2]*fat_mean + beta.hat[2,3]*x*sodium_mean) + exp(beta.hat[3,2]*fat_mean + beta.hat[3,3]*x*sodium_mean)),
+      col = "red", lty = "longdash", n = 1000, add = TRUE,
+      xlim = c(min(d.1$sugar_standard[d.1$Shelf==3]), max(d.1$sugar_standard[d.1$Shelf==3])))
+
+curve(expr = exp(beta.hat[3,2]*fat_mean + beta.hat[3,3]*x*sodium_mean)/(1 + exp(beta.hat[1,2]*fat_mean + beta.hat[1,3]*x*sodium_mean) + exp(beta.hat[2,2]*fat_mean + beta.hat[2,3]*x*sodium_mean) + exp(beta.hat[3,2]*fat_mean + beta.hat[3,3]*x*sodium_mean)),
+      col = "blue", lty = "dotted", n = 1000, add = TRUE,
+      xlim = c(min(d.1$sugar_standard[d.1$Shelf==4]), max(d.1$sugar_standard[d.1$Shelf==4])))
+
+
+legend(x = 0, y = 0.8, legend=c(1, 2, 3, 4), lty=c( "solid", "dotdash","longdash","dotted"),
+      col=c("yellow", "green","red","blue"), bty="n", seg.len = 4)
+```
+**1.5 (1 point):** Estimate odds ratios and calculate corresponding confidence intervals for each explanatory variable. Relate your interpretations back to the plots constructed for this exercise. 
+
+
+```{r fig.show='hold', fig.align='center'}
+
+# For 1 v 2
+sd.cereal <- apply(X = d.1[8:10], MARGIN = 2, FUN = sd)
+
+# See what the standard deviations are in order to interpret the odds 
+print(sd.cereal)
+c.val <- c(1, sd.cereal)
+bhat <- coefficients(model.1.2)[1, 1:4]
+round(exp(c.val*bhat), 2)[2:4]
+
+conf.beta <- confint(object = model.1.2, level = 0.95)
+round(data.frame(low = exp(c.val*conf.beta[1:4, 1:2, 1])[,1], up = exp(c.val*conf.beta[1:4, 1:2, 1])[,2])[2:4,], 2)
+
+```
+For a 0.27 decrease in sugar, the odds of shelf 1 v 2 incease by 2.06x. For a 0.30 decrease in fat, the odds of shelf 1 v 2 incease by 3.37x.  For a 0.23 decrease in sodium, the odds of shelf 1 v 2 incease by 0.02x. Without loss of generality, we can conduct the same analysis on shelf 1 v 3 and shelf 1 v 4. 
+
+
+```{r fig.show='hold', fig.align='center'}
+
+# For 1 v 3
+sd.cereal <- apply(X = d.1[8:10], MARGIN = 2, FUN = sd)
+c.val <- c(1, sd.cereal)
+bhat <- coefficients(model.1.2)[2, 1:4]
+round(exp(c.val*bhat), 2)[2:4]
+
+conf.beta <- confint(object = model.1.2, level = 0.95)
+round(data.frame(low = exp(c.val*conf.beta[1:4, 1:2, 2])[,1], up = exp(c.val*conf.beta[1:4, 1:2, 2])[,2])[2:4,], 2)
+
+```
+
+```{r fig.show='hold', fig.align='center'}
+
+# For 1 v 4
+sd.cereal <- apply(X = d.1[8:10], MARGIN = 2, FUN = sd)
+c.val <- c(1, sd.cereal)
+bhat <- coefficients(model.1.2)[3, 1:4]
+round(exp(c.val*bhat), 2)[2:4]
+
+conf.beta <- confint(object = model.1.2, level = 0.95)
+round(data.frame(low = exp(c.val*conf.beta[1:4, 1:2, 3])[,1], up = exp(c.val*conf.beta[1:4, 1:2, 3])[,2])[2:4,], 2)
+
+```
+
+\newpage
+# 2. Alcohol, self-esteem and negative relationship interactions (5 points)
+
+Read the example **'Alcohol Consumption'** in chapter 4.2.2 of the textbook. This is based on a study in which moderate-to-heavy drinkers (defined as at least 12 alcoholic drinks/week for women, 15 for men) were recruited to keep a daily record of each drink that they consumed over a 30-day study period. Participants also completed a variety of rating scales covering daily events in their lives and items related to self-esteem. The data are given in the *DeHartSimplified.csv *data set. Questions 24-26 of chapter 3 of the textbook also relate to this data set and give more explanation of its variables.  
+The researchers stated the following hypothesis:
+*We hypothesized that negative interactions with romantic partners would be associated with alcohol consumption (and an increased desire to drink). We predicted that people with low trait self-esteem would drink more on days they experienced more negative relationship interactions compared with days during which they experienced fewer negative relationship interactions. The relation between drinking and negative relationship interactions should not be evident for individuals with high trait self-esteem.*
+
+**2.1 (2 points):** Conduct a thorough EDA of the data set, giving special attention to the relationships relevant to the researchers' hypotheses. You will use this to guide the model specification in the following questions. 
+```{r fig.show='hold', fig.align='center'}
+library(tidyverse)
+library(psych)
+library(gridExtra)
+d.2 <- read.csv("DeHartSimplified.csv", header=TRUE, sep=",")
+describe(d.2)
+subset.d2 <- d.2 %>% select (numall, nrel, state, rosn, desired)
+pairs.panels(subset.d2)
+```
+
+Below, we can see boxplots, histograms, and density plots for all the relevant variables.
+```{r fig.show='hold', fig.align='center', fig.width=5, fig.height=3}
+# NRel - negative romantic-relationship events
+boxplot(d.2$nrel, main= "NRels Boxplot", xlab = "NRels" )
+hist(d.2$nrel, breaks=20, main= "NRels Histogram", xlab = "NRels")
+plot(density(d.2$nrel), main='NRels Density', xlab='NRels')
+
+# Numall - number of drinks consumed
+boxplot(d.2$numall, main= "Drinks Boxplot", xlab = "Drinks" )
+hist(d.2$numall, breaks=20, main= "Drinks Histogram", xlab = "Drinks")
+plot(density(na.omit(d.2$numall)), main='Drinks Density', xlab='Drinks')
+
+# State - state (short-term) self- esteem
+boxplot(d.2$state, main= "State Boxplot", xlab = "State" )
+hist(d.2$state, breaks=20, main= "State Histogram", xlab = "State")
+plot(density(na.omit(d.2$state)), main='State Density', xlab='State')
+
+# Rosn -  trait (long-term) self-esteem
+boxplot(d.2$rosn, main= "rosn Boxplot", xlab = "rosn" )
+hist(d.2$rosn, breaks=20, main= "rosn Histogram", xlab = "rosn")
+plot(density(d.2$rosn), main='rosn Density', xlab='rosn')
+
+# Desired -  desired drinks
+boxplot(d.2$desired, main= "rosn Boxplot", xlab = "rosn" )
+hist(d.2$desired, breaks=20, main= "rosn Histogram", xlab = "rosn")
+plot(density(na.omit(d.2$desired)), main='rosn Density', xlab='rosn')
+
+
+```
+
+Here, we can do some quick bivariate analysis.
+```{r fig.show='hold', fig.align='center'}
+
+plot(d.2$nrel, d.2$rosn)
+plot(d.2$numall, d.2$rosn)
+plot(d.2$desired, d.2$rosn)
+
+```
+We can see the difference between desired and actual drinks.
+
+```{r fig.show='hold', fig.align='center'}
+library(dplyr)
+
+print(summarise_at(group_by(d.2,dayweek),vars(numall),funs(mean(.,na.rm=TRUE))))
+print(summarise_at(group_by(d.2,dayweek),vars(desired),funs(mean(.,na.rm=TRUE))))
+
+```
+Over here, we compare the day of the week for the amount of drinks that were desired vs consumed. The amount desired stayed relatively constant throughout the days, the but the amount consumed spike aggresively on day 6, which is Saturday. Thus, we can run the models below using data without Saturday (which seems like a social day to drink, adding to the noise). We can then see what our results will look like.
+
+**2.2 (2 points):** Using an appropriate model (or models), evaluate the evidence that negative relationship interactions are associated with higher alcohol consumption and/or an increased desire to drink. 
+
+```{r fig.show='hold', fig.align='center'}
+
+model.2.2 <- glm(numall ~ nrel, family=poisson(link="log"), data=d.2)
+summary(model.2.2)
+
+model.2.2.1 <- glm(desired ~ nrel, data=d.2)
+summary(model.2.2.1)
+```
+The first model is: 0.90071 + 0.06447(nrel).
+The 2nd model is: 4.40398 + 0.16779(nrel).
+
+At the 1% significant level, it is clear an increase in the negative romatic events leads to an increase in the amount of drinks consumed. At the 5% level, an increase in the negative romatic events leads to an increase in the amount of drinks desired. Both are important metrics to take a look at.
+
+Here, we explore the effect of long term self esteem on the the number of drinks consumed, as well as desired amount of drinks.
+```{r fig.show='hold', fig.align='center'}
+
+model.2.2.2 <- glm(numall ~ nrel + rosn + nrel*rosn, family=poisson(link="log"), data=d.2)
+summary(model.2.2.2)
+
+model.2.2.3 <- glm(desired ~ nrel + rosn + nrel*rosn, data=d.2)
+summary(model.2.2.3)
+```
+The first model is: 0.77930 + 0.46373(nrel) + 0.03535(rosn) - 0.11546(nrel:rosn).
+The 2nd model is: 6.0286 + 0.9269(nrel) - 0.4739(rosn) - .2159(nrel:rosn).
+
+Here, we add some interaction affects. Particularily, we add the interaction between ngeative romantic relations and state. We see that there is signifiance at the 10% level for nrel*rosn. This is the interaction between long term self esteem and negative romantic relatiobships. As long term self esteem increases, the amount of drinks does seem to go down for a negative romantic relationship state.
+
+When looking at desired amount of drinks, long term state (ROSN) is the only significant predictor.  
+
+```{r fig.show='hold', fig.align='center'}
+Anova(model.2.2)
+Anova(model.2.2.1)
+Anova(model.2.2.2)
+Anova(model.2.2.3)
+```
+We can confirm this using our LRT test.
+
+**2.3 (1 points):** Discuss whether the relationship between drinking and negative relationship interactions differs according to individuals' levels of trait self-esteem.
+
+We could use the previous model, but I want to present another way to answer this question using bins of the data. I use the cut function to bin all the data, broken up by levels of self esteem.
+```{r fig.show='hold', fig.align='center'}
+
+# plot(d.2$state)
+d.2$statebins <- cut(d.2$rosn, 3, labels=c("Low", "Med", "High"), include.lowest=TRUE)
+d.2 <- na.omit(d.2, x = "statebins")
+d.2 <- na.omit(d.2, x = "state")
+d.2 <- na.omit(d.2, x = "nrels")
+
+plot(d.2[d.2$statebins == "High", ]$numall, d.2[d.2$statebins == "High", ]$rosn, xlab = "Index", ylab = "State Score", main = "High Bucket")
+plot(d.2[d.2$statebins == "Med", ]$numall, d.2[d.2$statebins == "Med", ]$rosn, xlab = "Index", ylab = "State Score", main = "Medium Bucket")
+plot(d.2[d.2$statebins == "Low", ]$numall, d.2[d.2$statebins == "Low", ]$rosn, xlab = "Index", ylab = "State Score", main = "Low Bucket")
+
+# d.2
+model.2.4 <- glm(numall ~ nrel, family=poisson(link="log"), data=d.2[d.2$statebins == "High", ])
+summary(model.2.4)
+
+model.2.4.2 <- glm(numall ~ nrel, family=poisson(link="log"), data=d.2[d.2$statebins == "Med", ])
+summary(model.2.4.2)
+
+model.2.4.3 <- glm(numall ~ nrel, family=poisson(link="log"), data=d.2[d.2$statebins == "Low", ])
+summary(model.2.4.3)
+```
+The first model is: 0.89259 + 0.04559(nrel).
+The 2nd model is: 0.96225 + 0.09083(nrel).
+The 3rd model is: 0.5712 + 0.1066(nrel).
+
+I find that for low and high buckets for self esteem, a negative romantic relation has no significant effect on the amount one drinks. However, for the medium bucket, nrel is a signifcant predictor at the 5% level. This could be interpreted as those with high self esteems/low self esteems don't have romantic relationships affect how much they drink. However, the average indivdual does seem to be affected by a negative event in the relationship.
